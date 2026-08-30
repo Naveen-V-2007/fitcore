@@ -5,6 +5,7 @@ const base = createCrudApi('classes', `*, trainers(name)`);
 
 export const classApi = {
   ...base,
+
   async getStats() {
     const startOfDay = new Date(); startOfDay.setHours(0, 0, 0, 0);
     const endOfDay = new Date(); endOfDay.setHours(23, 59, 59, 999);
@@ -15,6 +16,30 @@ export const classApi = {
     const fullyBooked = (all || []).filter((c) => c.status === 'full').length;
     return { todaysClasses: todaysClasses || 0, totalBookings, availableSlots, fullyBooked };
   },
+
+  async create(payload) {
+    const insertPayload = {
+      name: payload.name || payload.class_name || 'Untitled Class',
+      trainer_id: payload.trainer_id || null,
+      scheduled_at: payload.scheduled_at
+        ? new Date(payload.scheduled_at).toISOString()
+        : new Date().toISOString(),
+      duration_minutes: payload.duration_minutes || 60,
+      capacity: Number(payload.capacity) || 20,
+      booked_count: 0,
+      status: 'scheduled',
+      room: payload.room || null,
+    };
+
+    const { data, error } = await supabase
+      .from('classes')
+      .insert([insertPayload])
+      .select();
+
+    if (error) throw error;
+    return data?.[0];
+  },
+
   async bookMember(classId, memberId) {
     const { error: be } = await supabase.from('class_bookings').insert({ class_id: classId, member_id: memberId });
     if (be) throw be;
@@ -26,6 +51,7 @@ export const classApi = {
     if (error) throw error;
     return data;
   },
+
   async cancelBooking(classId, memberId) {
     const { error: de } = await supabase.from('class_bookings').delete().eq('class_id', classId).eq('member_id', memberId);
     if (de) throw de;
@@ -37,6 +63,7 @@ export const classApi = {
     if (error) throw error;
     return data;
   },
+
   async getBookings(classId) {
     const { data, error } = await supabase.from('class_bookings').select('*, members(name, member_code, avatar_url)').eq('class_id', classId);
     if (error) throw error;
