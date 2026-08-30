@@ -1,9 +1,21 @@
 import { useState } from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
 import {
-  LayoutGrid, Users, Dumbbell, CreditCard, ClipboardCheck, Wallet,
-  Calendar, Briefcase, UserPlus, BarChart3, Settings as SettingsIcon, Plus,
+  LayoutGrid,
+  Users,
+  Dumbbell,
+  CreditCard,
+  ClipboardCheck,
+  Wallet,
+  Calendar,
+  Briefcase,
+  UserPlus,
+  BarChart3,
+  Settings as SettingsIcon,
+  Plus,
+  LogOut,
 } from 'lucide-react';
+import { useAuth } from '../../context/AuthContext';
 import AddMemberModal from '../members/AddMemberModal';
 
 const NAV_ITEMS = [
@@ -22,6 +34,7 @@ const NAV_ITEMS = [
 
 export default function Sidebar() {
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+  const { logout } = useAuth();
   const navigate = useNavigate();
 
   const handleMemberAdded = () => {
@@ -29,11 +42,16 @@ export default function Sidebar() {
     navigate('/members');
   };
 
+  const handleLogout = async () => {
+    await logout();
+    navigate('/login');
+  };
+
   return (
     <>
-      <aside className="w-64 shrink-0 bg-white border-r border-gray-200 flex flex-col h-screen sticky top-0">
-        <div className="px-6 py-5">
-          <h1 className="text-xl font-bold text-gray-900">FitCore</h1>
+      <aside className="w-64 bg-white border-r border-gray-200 flex flex-col h-screen">
+        <div className="p-6">
+          <h1 className="text-xl font-bold text-brand-600">FitCore</h1>
           <p className="text-xs text-gray-500">Gym Management</p>
         </div>
 
@@ -56,13 +74,21 @@ export default function Sidebar() {
           ))}
         </nav>
 
-        <div className="p-4">
+        <div className="p-4 space-y-2">
           <button
             type="button"
             onClick={() => setIsAddModalOpen(true)}
             className="w-full flex items-center justify-center gap-2 bg-brand-500 hover:bg-brand-600 text-white font-medium text-sm py-2.5 rounded-lg transition cursor-pointer shadow-sm"
           >
             <Plus size={16} /> Add Member
+          </button>
+
+          <button
+            type="button"
+            onClick={handleLogout}
+            className="w-full flex items-center justify-center gap-2 border border-gray-300 text-gray-600 hover:bg-gray-50 font-medium text-sm py-2.5 rounded-lg transition cursor-pointer"
+          >
+            <LogOut size={16} /> Sign Out
           </button>
         </div>
       </aside>
