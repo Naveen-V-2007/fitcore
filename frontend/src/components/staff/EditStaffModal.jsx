@@ -1,48 +1,49 @@
 import React, { useState, useEffect } from 'react';
-import { membershipApi } from '../../api/membershipApi';
+import { staffApi } from '../../api/staffApi';
 
-export default function EditPlanModal({ isOpen, onClose, plan, onPlanUpdated }) {
+export default function EditStaffModal({ isOpen, onClose, staff, onStaffUpdated }) {
   const [formData, setFormData] = useState({
     name: '',
-    price: '',
-    duration_months: 1,
-    description: '',
+    email: '',
+    phone: '',
+    role: 'Front Desk',
     status: 'active'
   });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
 
   useEffect(() => {
-    if (plan) {
+    if (staff) {
       setFormData({
-        name: plan.name || '',
-        price: plan.price || '',
-        duration_months: plan.duration_months || 1,
-        description: plan.description || '',
-        status: plan.status || 'active'
+        name: staff.name || `${staff.first_name || ''} ${staff.last_name || ''}`.trim() || '',
+        email: staff.email || '',
+        phone: staff.phone || '',
+        role: staff.role_title || staff.role || 'Front Desk',
+        status: staff.status || 'active'
       });
     }
-  }, [plan]);
+  }, [staff]);
 
-  if (!isOpen || !plan) return null;
+  if (!isOpen || !staff) return null;
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setLoading(true);
     setError(null);
     try {
-      await membershipApi.update(plan.id, {
+      await staffApi.update(staff.id, {
         name: formData.name,
-        price: parseFloat(formData.price),
-        duration_months: parseInt(formData.duration_months, 10),
-        description: formData.description,
+        role: formData.role,
+        role_title: formData.role,
+        email: formData.email,
+        phone: formData.phone,
         status: formData.status
       });
-      if (onPlanUpdated) onPlanUpdated();
+      if (onStaffUpdated) onStaffUpdated();
       onClose();
     } catch (err) {
-      console.error('Failed to update membership plan:', err);
-      setError(err.message || 'Error updating plan');
+      console.error('Failed to update staff:', err);
+      setError(err.message || 'Error updating staff details');
     } finally {
       setLoading(false);
     }
@@ -51,7 +52,7 @@ export default function EditPlanModal({ isOpen, onClose, plan, onPlanUpdated }) 
   return (
     <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
       <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl relative">
-        <h2 className="text-xl font-bold text-gray-900 mb-4">Edit Membership Plan</h2>
+        <h2 className="text-xl font-bold text-gray-900 mb-4">Edit Staff Member</h2>
 
         {error && (
           <div className="mb-4 p-3 bg-red-50 text-red-700 text-sm rounded-lg">
@@ -61,7 +62,7 @@ export default function EditPlanModal({ isOpen, onClose, plan, onPlanUpdated }) 
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
-            <label className="block text-xs font-semibold uppercase text-gray-600 mb-1">Plan Name</label>
+            <label className="block text-xs font-semibold uppercase text-gray-600 mb-1">Full Name</label>
             <input
               type="text"
               required
@@ -71,38 +72,35 @@ export default function EditPlanModal({ isOpen, onClose, plan, onPlanUpdated }) 
             />
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="block text-xs font-semibold uppercase text-gray-600 mb-1">Price ($)</label>
-              <input
-                type="number"
-                step="0.01"
-                required
-                className="w-full border border-gray-300 rounded-lg p-2.5 text-sm focus:ring-2 focus:ring-[#84c22a] outline-none"
-                value={formData.price}
-                onChange={(e) => setFormData({ ...formData, price: e.target.value })}
-              />
-            </div>
-            <div>
-              <label className="block text-xs font-semibold uppercase text-gray-600 mb-1">Duration (Months)</label>
-              <input
-                type="number"
-                min="1"
-                required
-                className="w-full border border-gray-300 rounded-lg p-2.5 text-sm focus:ring-2 focus:ring-[#84c22a] outline-none"
-                value={formData.duration_months}
-                onChange={(e) => setFormData({ ...formData, duration_months: e.target.value })}
-              />
-            </div>
+          <div>
+            <label className="block text-xs font-semibold uppercase text-gray-600 mb-1">Role / Position</label>
+            <input
+              type="text"
+              required
+              className="w-full border border-gray-300 rounded-lg p-2.5 text-sm focus:ring-2 focus:ring-[#84c22a] outline-none"
+              value={formData.role}
+              onChange={(e) => setFormData({ ...formData, role: e.target.value })}
+            />
           </div>
 
           <div>
-            <label className="block text-xs font-semibold uppercase text-gray-600 mb-1">Description</label>
-            <textarea
-              rows="3"
+            <label className="block text-xs font-semibold uppercase text-gray-600 mb-1">Email Address</label>
+            <input
+              type="email"
+              required
               className="w-full border border-gray-300 rounded-lg p-2.5 text-sm focus:ring-2 focus:ring-[#84c22a] outline-none"
-              value={formData.description}
-              onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+              value={formData.email}
+              onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+            />
+          </div>
+
+          <div>
+            <label className="block text-xs font-semibold uppercase text-gray-600 mb-1">Phone Number</label>
+            <input
+              type="tel"
+              className="w-full border border-gray-300 rounded-lg p-2.5 text-sm focus:ring-2 focus:ring-[#84c22a] outline-none"
+              value={formData.phone}
+              onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
             />
           </div>
 
@@ -115,6 +113,7 @@ export default function EditPlanModal({ isOpen, onClose, plan, onPlanUpdated }) 
             >
               <option value="active">Active</option>
               <option value="inactive">Inactive</option>
+              <option value="on_leave">On Leave</option>
             </select>
           </div>
 
