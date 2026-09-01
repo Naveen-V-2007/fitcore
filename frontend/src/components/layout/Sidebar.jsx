@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import logo from '../../../assets/logo.png';
 import { NavLink, useNavigate } from 'react-router-dom';
 import {
   LayoutGrid,
