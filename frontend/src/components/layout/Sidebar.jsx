@@ -50,10 +50,13 @@ export default function Sidebar() {
   return (
     <>
       <aside className="w-64 bg-white border-r border-gray-200 flex flex-col h-screen">
-        <div className="p-6">
-          <h1 className="text-xl font-bold text-brand-600">FitCore</h1>
-          <p className="text-xs text-gray-500">Gym Management</p>
-        </div>
+        <div className="px-6 py-5 flex items-center gap-2">
+           <img src={logo} alt="FitCore" className="w-8 h-8 rounded-lg object-cover" />
+           <div>
+              <h1 className="text-xl font-bold text-gray-900">FitCore</h1>
+              <p className="text-xs text-gray-500">Gym Management</p>
+            </div>
+          </div>
 
         <nav className="flex-1 px-3 space-y-1 overflow-y-auto">
           {NAV_ITEMS.map(({ to, label, icon: Icon }) => (
