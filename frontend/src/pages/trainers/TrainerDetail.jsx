@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import { ChevronRight, Dumbbell, Mail, Phone, Users, Calendar } from 'lucide-react';
+import { ChevronRight, Dumbbell, Mail, Phone, Users } from 'lucide-react';
 import StatusBadge from '../../components/common/StatusBadge';
 import EditTrainerModal from '../../components/trainers/EditTrainerModal';
 import { trainerApi } from '../../api/trainerApi';
@@ -16,12 +16,9 @@ export default function TrainerDetail() {
   const loadData = useCallback(async () => {
     try {
       setLoading(true);
-      const [trainerData, membersData] = await Promise.all([
-        trainerApi.getById(id),
-        trainerApi.getAssignedMembers(id)
-      ]);
-      setTrainer(trainerData);
-      setAssignedMembers(membersData || []);
+      const data = await trainerApi.getFullProfile(id);
+      setTrainer(data);
+      setAssignedMembers(data?.members || []);
     } catch (err) {
       console.error('Failed to load trainer details:', err);
     } finally {
@@ -57,7 +54,7 @@ export default function TrainerDetail() {
   if (loading) return <p className="p-8 text-gray-400 text-sm">Loading trainer profile...</p>;
   if (!trainer) return <p className="p-8 text-red-500 text-sm">Trainer not found.</p>;
 
-  const trainerName = trainer.name || trainer.full_name || 'Trainer';
+  const trainerName = trainer.name || trainer.full_name || `${trainer.first_name || ''} ${trainer.last_name || ''}`.trim() || 'Trainer';
   const isInactive = trainer.status === 'inactive';
 
   return (
@@ -82,7 +79,9 @@ export default function TrainerDetail() {
               <h1 className="text-2xl font-bold text-gray-900">{trainerName}</h1>
               <StatusBadge status={trainer.status || 'active'} />
             </div>
-            <p className="text-xs text-gray-500 mt-0.5">{trainer.specialty || 'General Trainer'}</p>
+            <p className="text-xs text-gray-500 mt-0.5">
+              {trainer.specialty || trainer.specialization || 'General Trainer'} · Code: {trainer.trainer_code || `TR-${trainer.id?.slice(0, 4)?.toUpperCase() || '101'}`}
+            </p>
           </div>
         </div>
 
@@ -117,7 +116,7 @@ export default function TrainerDetail() {
           </div>
           <div>
             <p className="text-xs text-gray-500 font-medium">Assigned Clients</p>
-            <p className="text-lg font-bold text-gray-900">{assignedMembers.length}</p>
+            <p className="text-lg font-bold text-gray-900">{trainer.totalClients ?? assignedMembers.length}</p>
           </div>
         </div>
 
@@ -152,17 +151,32 @@ export default function TrainerDetail() {
           <p className="text-sm text-gray-500 py-4">No members assigned to this trainer yet.</p>
         ) : (
           <div className="divide-y divide-gray-100">
-            {assignedMembers.map((m) => (
-              <div key={m.id} className="py-3 flex items-center justify-between">
-                <div>
-                  <p className="text-sm font-medium text-gray-900">
-                    {m.first_name ? `${m.first_name} ${m.last_name || ''}`.trim() : m.email}
-                  </p>
-                  <p className="text-xs text-gray-500">{m.email}</p>
+            {assignedMembers.map((m) => {
+              const memberDisplayName =
+                m.name ||
+                `${m.first_name || ''} ${m.last_name || ''}`.trim() ||
+                m.email;
+
+              return (
+                <div key={m.id} className="py-3 flex items-center justify-between">
+                  <div>
+                    <Link
+                      to={`/members/${m.id}`}
+                      className="text-sm font-medium text-gray-900 hover:text-brand-600 transition-colors"
+                    >
+                      {memberDisplayName}
+                    </Link>
+                    <p className="text-xs text-gray-500">{m.email || m.phone || 'No contact details'}</p>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <span className="text-xs text-gray-400">
+                      {m.created_at ? new Date(m.created_at).toLocaleDateString() : ''}
+                    </span>
+                    <StatusBadge status={m.status || 'active'} />
+                  </div>
                 </div>
-                <StatusBadge status={m.status || 'active'} />
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </div>

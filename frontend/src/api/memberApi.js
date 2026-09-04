@@ -1,7 +1,7 @@
 import { supabase } from './supabaseClient';
 
 export const memberApi = {
-  async getAll(selectQuery = '*') {
+  async getAll(selectQuery = '*, membership_plans(id, name, price), trainers(id, name, specialty)') {
     const { data, error } = await supabase
       .from('members')
       .select(selectQuery)
@@ -13,7 +13,7 @@ export const memberApi = {
   async list({ page = 1, pageSize = 10, search = '' } = {}) {
     let query = supabase
       .from('members')
-      .select('*', { count: 'exact' })
+      .select('*, membership_plans(id, name, price), trainers(id, name, specialty)', { count: 'exact' })
       .order('created_at', { ascending: false });
 
     if (search) {
@@ -30,7 +30,7 @@ export const memberApi = {
   async getById(id) {
     const { data, error } = await supabase
       .from('members')
-      .select('*')
+      .select('*, membership_plans(id, name, price), trainers(id, name, specialty)')
       .eq('id', id)
       .single();
     if (error) throw error;
@@ -39,9 +39,21 @@ export const memberApi = {
 
   async getFullProfile(id) {
     const [memberRes, paymentsRes, attendanceRes] = await Promise.all([
-      supabase.from('members').select('*').eq('id', id).single(),
-      supabase.from('payments').select('*').eq('member_id', id).order('payment_date', { ascending: false }),
-      supabase.from('attendance').select('*').eq('member_id', id).order('check_in', { ascending: false })
+      supabase
+        .from('members')
+        .select('*, membership_plans(id, name, price, duration_months), trainers(id, name, specialty, email, phone)')
+        .eq('id', id)
+        .single(),
+      supabase
+        .from('payments')
+        .select('*')
+        .eq('member_id', id)
+        .order('payment_date', { ascending: false }),
+      supabase
+        .from('attendance')
+        .select('*')
+        .eq('member_id', id)
+        .order('check_in', { ascending: false })
     ]);
 
     if (memberRes.error) throw memberRes.error;
@@ -75,13 +87,15 @@ export const memberApi = {
       first_name: firstName || combinedName,
       last_name: lastName,
       name: combinedName,
-      full_name: combinedName
+      full_name: combinedName,
+      membership_plan_id: payload.membership_plan_id || null,
+      trainer_id: payload.trainer_id || null
     };
 
     const { data, error } = await supabase
       .from('members')
       .insert([insertPayload])
-      .select();
+      .select('*, membership_plans(id, name, price), trainers(id, name, specialty)');
 
     if (error) throw error;
     return data?.[0];
@@ -95,11 +109,19 @@ export const memberApi = {
       patch.full_name = combined;
     }
 
+    if ('membership_plan_id' in updates) {
+      patch.membership_plan_id = updates.membership_plan_id || null;
+    }
+
+    if ('trainer_id' in updates) {
+      patch.trainer_id = updates.trainer_id || null;
+    }
+
     const { data, error } = await supabase
       .from('members')
       .update(patch)
       .eq('id', id)
-      .select();
+      .select('*, membership_plans(id, name, price), trainers(id, name, specialty)');
 
     if (error) throw error;
     return data?.[0];

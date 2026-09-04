@@ -1,5 +1,7 @@
-import React, { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { memberApi } from '../../api/memberApi';
+import { membershipApi } from '../../api/membershipApi';
+import { trainerApi } from '../../api/trainerApi';
 
 export default function AddMemberModal({ isOpen, onClose, onMemberAdded }) {
   const [formData, setFormData] = useState({
@@ -7,10 +9,30 @@ export default function AddMemberModal({ isOpen, onClose, onMemberAdded }) {
     last_name: '',
     email: '',
     phone: '',
-    status: 'active'
+    status: 'active',
+    membership_plan_id: '',
+    trainer_id: ''
   });
+
+  const [plans, setPlans] = useState([]);
+  const [trainers, setTrainers] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
+
+  useEffect(() => {
+    if (isOpen) {
+      // Fetch available plans and trainers for the dropdowns
+      Promise.all([
+        membershipApi.getAll ? membershipApi.getAll() : membershipApi.list().then(res => res.data),
+        trainerApi.getAll ? trainerApi.getAll() : trainerApi.list().then(res => res.data)
+      ])
+        .then(([plansData, trainersData]) => {
+          setPlans(plansData || []);
+          setTrainers(trainersData || []);
+        })
+        .catch((err) => console.error('Error fetching modal options:', err));
+    }
+  }, [isOpen]);
 
   if (!isOpen) return null;
 
@@ -18,19 +40,33 @@ export default function AddMemberModal({ isOpen, onClose, onMemberAdded }) {
     e.preventDefault();
     setLoading(true);
     setError(null);
+
     try {
       await memberApi.create({
         first_name: formData.first_name,
         last_name: formData.last_name,
         email: formData.email,
         phone: formData.phone,
-        status: formData.status
+        status: formData.status,
+        membership_plan_id: formData.membership_plan_id || null,
+        trainer_id: formData.trainer_id || null
+      });
+
+      // Reset form & trigger refresh
+      setFormData({
+        first_name: '',
+        last_name: '',
+        email: '',
+        phone: '',
+        status: 'active',
+        membership_plan_id: '',
+        trainer_id: ''
       });
       if (onMemberAdded) onMemberAdded();
       onClose();
     } catch (err) {
-      console.error('Failed to create member:', err);
-      setError(err.message || 'Error creating member');
+      console.error('Failed to add member:', err);
+      setError(err.message || 'Failed to add member');
     } finally {
       setLoading(false);
     }
@@ -38,7 +74,7 @@ export default function AddMemberModal({ isOpen, onClose, onMemberAdded }) {
 
   return (
     <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-      <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl relative">
+      <div className="bg-white rounded-2xl max-w-lg w-full p-6 shadow-2xl relative max-h-[90vh] overflow-y-auto">
         <h2 className="text-xl font-bold text-gray-900 mb-4">Add New Member</h2>
 
         {error && (
@@ -64,7 +100,6 @@ export default function AddMemberModal({ isOpen, onClose, onMemberAdded }) {
               <label className="block text-xs font-semibold uppercase text-gray-600 mb-1">Last Name</label>
               <input
                 type="text"
-                required
                 placeholder="Doe"
                 className="w-full border border-gray-300 rounded-lg p-2.5 text-sm focus:ring-2 focus:ring-[#84c22a] outline-none"
                 value={formData.last_name}
@@ -96,6 +131,40 @@ export default function AddMemberModal({ isOpen, onClose, onMemberAdded }) {
             />
           </div>
 
+          {/* Membership Plan Selection */}
+          <div>
+            <label className="block text-xs font-semibold uppercase text-gray-600 mb-1">Membership Plan</label>
+            <select
+              className="w-full border border-gray-300 rounded-lg p-2.5 text-sm focus:ring-2 focus:ring-[#84c22a] outline-none bg-white"
+              value={formData.membership_plan_id}
+              onChange={(e) => setFormData({ ...formData, membership_plan_id: e.target.value })}
+            >
+              <option value="">-- Select a Plan (Optional) --</option>
+              {plans.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.name} (${p.price}/mo)
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {/* Assign Trainer (Optional) */}
+          <div>
+            <label className="block text-xs font-semibold uppercase text-gray-600 mb-1">Assign Trainer (Optional)</label>
+            <select
+              className="w-full border border-gray-300 rounded-lg p-2.5 text-sm focus:ring-2 focus:ring-[#84c22a] outline-none bg-white"
+              value={formData.trainer_id}
+              onChange={(e) => setFormData({ ...formData, trainer_id: e.target.value })}
+            >
+              <option value="">-- None / Select Later --</option>
+              {trainers.map((t) => (
+                <option key={t.id} value={t.id}>
+                  {t.name || t.full_name} {t.specialty ? `(${t.specialty})` : ''}
+                </option>
+              ))}
+            </select>
+          </div>
+
           <div>
             <label className="block text-xs font-semibold uppercase text-gray-600 mb-1">Status</label>
             <select
@@ -104,9 +173,8 @@ export default function AddMemberModal({ isOpen, onClose, onMemberAdded }) {
               onChange={(e) => setFormData({ ...formData, status: e.target.value })}
             >
               <option value="active">Active</option>
-              <option value="pending">Pending</option>
               <option value="inactive">Inactive</option>
-              <option value="frozen">Frozen</option>
+              <option value="suspended">Suspended</option>
             </select>
           </div>
 
@@ -123,7 +191,7 @@ export default function AddMemberModal({ isOpen, onClose, onMemberAdded }) {
               disabled={loading}
               className="px-5 py-2 text-sm font-medium text-white bg-[#84c22a] hover:bg-[#72a823] rounded-lg transition-colors disabled:opacity-50 shadow-sm cursor-pointer"
             >
-              {loading ? 'Saving...' : 'Add Member'}
+              {loading ? 'Adding...' : 'Add Member'}
             </button>
           </div>
         </form>

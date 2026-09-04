@@ -17,7 +17,9 @@ export const trainerApi = {
       .order('created_at', { ascending: false });
 
     if (search) {
-      query = query.or(`name.ilike.%${search}%,specialization.ilike.%${search}%,email.ilike.%${search}%`);
+      query = query.or(
+        `name.ilike.%${search}%,first_name.ilike.%${search}%,last_name.ilike.%${search}%,specialization.ilike.%${search}%,specialty.ilike.%${search}%,email.ilike.%${search}%`
+      );
     }
 
     const from = (page - 1) * pageSize;
@@ -40,28 +42,66 @@ export const trainerApi = {
   async getAssignedMembers(trainerId) {
     const { data, error } = await supabase
       .from('members')
-      .select('*')
-      .eq('trainer_id', trainerId);
-    if (error) return [];
-    return data || [];
+      .select('id, name, first_name, last_name, email, phone, status, created_at, membership_plan_id')
+      .eq('trainer_id', trainerId)
+      .order('created_at', { ascending: false });
+
+    if (error) {
+      console.error('Error fetching assigned members:', error);
+      return [];
+    }
+
+    return (data || []).map((m) => ({
+      ...m,
+      name: m.name || `${m.first_name || ''} ${m.last_name || ''}`.trim() || m.email,
+    }));
+  },
+
+  async getFullProfile(id) {
+    const [trainerRes, members] = await Promise.all([
+      supabase.from('trainers').select('*').eq('id', id).single(),
+      this.getAssignedMembers(id),
+    ]);
+
+    if (trainerRes.error) throw trainerRes.error;
+
+    return {
+      ...trainerRes.data,
+      members: members || [],
+      totalClients: (members || []).length,
+      activeClients: (members || []).filter((m) => m.status === 'active').length,
+    };
+  },
+
+  async getStats() {
+    const { data, error } = await supabase.from('trainers').select('status');
+    if (error) throw error;
+
+    const total = data?.length || 0;
+    const active = data?.filter((t) => t.status === 'active').length || 0;
+    return { total, active };
   },
 
   async create(payload) {
     const firstName = payload.first_name || '';
     const lastName = payload.last_name || '';
-    const combinedName = `${firstName} ${lastName}`.trim() || payload.name || 'Trainer';
+    const combinedName =
+      payload.name || `${firstName} ${lastName}`.trim() || payload.full_name || 'Trainer';
     const trainerCode = payload.trainer_code || `TR-${Math.floor(100 + Math.random() * 900)}`;
+    const specialtyValue = payload.specialty || payload.specialization || 'General Fitness';
 
     const insertPayload = {
       trainer_code: trainerCode,
       name: combinedName,
+      full_name: combinedName,
       first_name: firstName,
       last_name: lastName,
-      specialization: payload.specialty || payload.specialization || '',
+      specialty: specialtyValue,
+      specialization: specialtyValue,
       phone: payload.phone || null,
       email: payload.email || null,
       bio: payload.bio || null,
-      status: payload.status || 'active',
+      status: (payload.status || 'active').toLowerCase(),
     };
 
     const { data, error } = await supabase
@@ -75,12 +115,22 @@ export const trainerApi = {
 
   async update(id, updates) {
     const patch = { ...updates };
-    if (updates.first_name || updates.last_name) {
-      patch.name = `${updates.first_name || ''} ${updates.last_name || ''}`.trim();
+
+    if (updates.first_name || updates.last_name || updates.name) {
+      const combined =
+        updates.name || `${updates.first_name || ''} ${updates.last_name || ''}`.trim();
+      patch.name = combined;
+      patch.full_name = combined;
     }
-    if (updates.specialty) {
-      patch.specialization = updates.specialty;
-      delete patch.specialty;
+
+    if (updates.specialty || updates.specialization) {
+      const spec = updates.specialty || updates.specialization;
+      patch.specialty = spec;
+      patch.specialization = spec;
+    }
+
+    if (updates.status) {
+      patch.status = updates.status.toLowerCase();
     }
 
     const { data, error } = await supabase
