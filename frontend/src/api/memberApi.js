@@ -1,7 +1,7 @@
 import { supabase } from './supabaseClient';
 
 export const memberApi = {
-  async getAll(selectQuery = '*, membership_plans(id, name, price), trainers(id, name, specialty)') {
+  async getAll(selectQuery = '*') {
     const { data, error } = await supabase
       .from('members')
       .select(selectQuery)
@@ -11,37 +11,72 @@ export const memberApi = {
   },
 
   async list({ page = 1, pageSize = 10, search = '' } = {}) {
-    let query = supabase
-      .from('members')
-      .select('*, membership_plans(id, name, price), trainers(id, name, specialty)', { count: 'exact' })
-      .order('created_at', { ascending: false });
-
-    if (search) {
-      query = query.or(`first_name.ilike.%${search}%,last_name.ilike.%${search}%,name.ilike.%${search}%,email.ilike.%${search}%`);
-    }
-
     const from = (page - 1) * pageSize;
     const to = from + pageSize - 1;
-    const { data, error, count } = await query.range(from, to);
-    if (error) throw error;
-    return { data, count };
+
+    // 1. Try relational joined query first
+    try {
+      let query = supabase
+        .from('members')
+        .select('*, membership_plans(id, name, price), trainers(id, name, specialty)', { count: 'exact' })
+        .order('created_at', { ascending: false });
+
+      if (search) {
+        query = query.or(
+          `first_name.ilike.%${search}%,last_name.ilike.%${search}%,name.ilike.%${search}%,email.ilike.%${search}%`
+        );
+      }
+
+      const { data, error, count } = await query.range(from, to);
+
+      if (error) throw error;
+      return { data: data || [], count: count || 0 };
+    } catch (err) {
+      console.warn('Joined query failed, falling back to flat members table query:', err.message);
+
+      // 2. Fallback query if FK joins fail schema validation
+      let fallbackQuery = supabase
+        .from('members')
+        .select('*', { count: 'exact' })
+        .order('created_at', { ascending: false });
+
+      if (search) {
+        fallbackQuery = fallbackQuery.or(
+          `first_name.ilike.%${search}%,last_name.ilike.%${search}%,name.ilike.%${search}%,email.ilike.%${search}%`
+        );
+      }
+
+      const fallbackRes = await fallbackQuery.range(from, to);
+      if (fallbackRes.error) throw fallbackRes.error;
+      return { data: fallbackRes.data || [], count: fallbackRes.count || 0 };
+    }
   },
 
   async getById(id) {
-    const { data, error } = await supabase
-      .from('members')
-      .select('*, membership_plans(id, name, price), trainers(id, name, specialty)')
-      .eq('id', id)
-      .single();
-    if (error) throw error;
-    return data;
+    try {
+      const { data, error } = await supabase
+        .from('members')
+        .select('*, membership_plans(id, name, price), trainers(id, name, specialty)')
+        .eq('id', id)
+        .single();
+      if (error) throw error;
+      return data;
+    } catch {
+      const { data, error } = await supabase
+        .from('members')
+        .select('*')
+        .eq('id', id)
+        .single();
+      if (error) throw error;
+      return data;
+    }
   },
 
   async getFullProfile(id) {
     const [memberRes, paymentsRes, attendanceRes] = await Promise.all([
       supabase
         .from('members')
-        .select('*, membership_plans(id, name, price, duration_months), trainers(id, name, specialty, email, phone)')
+        .select('*')
         .eq('id', id)
         .single(),
       supabase
@@ -92,12 +127,16 @@ export const memberApi = {
       trainer_id: payload.trainer_id || null
     };
 
+    // Return pure insert data so foreign key join issues don't block record creation
     const { data, error } = await supabase
       .from('members')
       .insert([insertPayload])
-      .select('*, membership_plans(id, name, price), trainers(id, name, specialty)');
+      .select();
 
-    if (error) throw error;
+    if (error) {
+      console.error('Member insert error:', error);
+      throw error;
+    }
     return data?.[0];
   },
 
@@ -121,9 +160,12 @@ export const memberApi = {
       .from('members')
       .update(patch)
       .eq('id', id)
-      .select('*, membership_plans(id, name, price), trainers(id, name, specialty)');
+      .select();
 
-    if (error) throw error;
+    if (error) {
+      console.error('Member update error:', error);
+      throw error;
+    }
     return data?.[0];
   }
 };
