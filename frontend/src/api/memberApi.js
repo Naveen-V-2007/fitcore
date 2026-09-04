@@ -14,7 +14,6 @@ export const memberApi = {
     const from = (page - 1) * pageSize;
     const to = from + pageSize - 1;
 
-    // 1. Try relational joined query first
     try {
       let query = supabase
         .from('members')
@@ -28,13 +27,10 @@ export const memberApi = {
       }
 
       const { data, error, count } = await query.range(from, to);
-
       if (error) throw error;
       return { data: data || [], count: count || 0 };
     } catch (err) {
-      console.warn('Joined query failed, falling back to flat members table query:', err.message);
-
-      // 2. Fallback query if FK joins fail schema validation
+      console.warn('Joined list failed, falling back to flat select:', err.message);
       let fallbackQuery = supabase
         .from('members')
         .select('*', { count: 'exact' })
@@ -53,32 +49,30 @@ export const memberApi = {
   },
 
   async getById(id) {
-    try {
-      const { data, error } = await supabase
-        .from('members')
-        .select('*, membership_plans(id, name, price), trainers(id, name, specialty)')
-        .eq('id', id)
-        .single();
-      if (error) throw error;
-      return data;
-    } catch {
-      const { data, error } = await supabase
-        .from('members')
-        .select('*')
-        .eq('id', id)
-        .single();
-      if (error) throw error;
-      return data;
-    }
+    const { data, error } = await supabase
+      .from('members')
+      .select('*')
+      .eq('id', id)
+      .single();
+    if (error) throw error;
+    return data;
   },
 
   async getFullProfile(id) {
-    const [memberRes, paymentsRes, attendanceRes] = await Promise.all([
-      supabase
-        .from('members')
-        .select('*')
-        .eq('id', id)
-        .single(),
+    // 1. Fetch the member row
+    const { data: member, error: memberErr } = await supabase
+      .from('members')
+      .select('*')
+      .eq('id', id)
+      .single();
+
+    if (memberErr) throw memberErr;
+
+    const planId = member.membership_plan_id || member.plan_id;
+    const trainerId = member.trainer_id;
+
+    // 2. Fetch payments, attendance, plan, and trainer in parallel
+    const [paymentsRes, attendanceRes, planRes, trainerRes] = await Promise.all([
       supabase
         .from('payments')
         .select('*')
@@ -88,13 +82,19 @@ export const memberApi = {
         .from('attendance')
         .select('*')
         .eq('member_id', id)
-        .order('check_in', { ascending: false })
+        .order('check_in', { ascending: false }),
+      planId
+        ? supabase.from('membership_plans').select('*').eq('id', planId).maybeSingle()
+        : Promise.resolve({ data: null }),
+      trainerId
+        ? supabase.from('trainers').select('*').eq('id', trainerId).maybeSingle()
+        : Promise.resolve({ data: null })
     ]);
 
-    if (memberRes.error) throw memberRes.error;
-
     return {
-      ...memberRes.data,
+      ...member,
+      membership_plans: planRes.data || null,
+      trainers: trainerRes.data || null,
       payments: paymentsRes.data || [],
       attendance: attendanceRes.data || []
     };
@@ -127,14 +127,13 @@ export const memberApi = {
       trainer_id: payload.trainer_id || null
     };
 
-    // Return pure insert data so foreign key join issues don't block record creation
     const { data, error } = await supabase
       .from('members')
       .insert([insertPayload])
       .select();
 
     if (error) {
-      console.error('Member insert error:', error);
+      console.error('Member create error:', error);
       throw error;
     }
     return data?.[0];
